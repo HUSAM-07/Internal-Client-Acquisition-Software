@@ -1,66 +1,55 @@
 import streamlit as st
-import requests
+import openai
+import http.client
 import json
 
-# Replace with your actual RapidAPI key and endpoint
-RAPIDAPI_KEY = "40f14362a4mshf4b871f3b27fa62p1b293djsn07cfceb23c62"
-RAPIDAPI_ENDPOINT = "linkedin-data-api.p.rapidapi.com"
+# Replace with your API keys
+GEMINI_API_KEY = '40f14362a4mshf4b871f3b27fa62p1b293djsn07cfceb23c62'
 
-# Replace with your actual Gemini API key
-GEMINI_API_KEY = "AIzaSyDdhSQC9v1iHjXSJ0aVMmhL6i-Irln1s7c"
+def scrape_linkedin_profile(url):
+    conn = http.client.HTTPSConnection(GEMINI_API_KEY)
 
-# Define a function to scrape LinkedIn profile data
-def scrape_linkedin_profile(profile_url):
     headers = {
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "YOUR_RAPIDAPI_HOST"
+        'x-rapidapi-key': GEMINI_API_KEY,
+        'x-rapidapi-host': GEMINI_API_HOST
     }
 
-    url = f"{RAPIDAPI_ENDPOINT}?url={profile_url}"
-    response = requests.request("GET", url, headers=headers)
+    # URL encode the LinkedIn profile URL
+    profile_url_encoded = url.replace("/", "%2F").replace(":", "%3A")
+    endpoint = f"/get-profile-data-by-url?url={profile_url_encoded}"
 
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
+    conn.request("GET", endpoint, headers=headers)
 
-# Define a function to generate a customized email using Gemini API
-def generate_email(profile_data, message):
-    headers = {
-        "Authorization": f"Bearer {GEMINI_API_KEY}"
-    }
+    res = conn.getresponse()
+    data = res.read()
 
-    data = {
-        "prompt": f"""
-            Write a professional email to {profile_data["firstName"]} {profile_data["lastName"]} 
-            at {profile_data["email"]} based on their LinkedIn profile. 
-            {message}
-        """,
-        "max_tokens": 500
-    }
+    return json.loads(data.decode("utf-8"))
 
-    response = requests.post("https://api.openai.com/v1/completions", headers=headers, json=data)
+def generate_custom_email(profile_data):
+    prompt = f"Generate a customized email based on the following LinkedIn profile data: {profile_data}"
+    
+    response = openai.Completion.create(
+        engine="gpt-4",
+        prompt=prompt,
+        max_tokens=200
+    )
+    
+    email_text = response.choices[0].text.strip()
+    return email_text
 
-    if response.status_code == 200:
-        return response.json()["choices"][0]["text"]
-    else:
-        return None
+st.title("LinkedIn Profile Scraper and Email Generator")
+st.write("Enter a LinkedIn profile URL to generate a customized email.")
 
-# Streamlit UI
-st.title("LinkedIn Email Generator")
-
-profile_url = st.text_input("Enter LinkedIn profile URL:")
-
-message = st.text_area("Enter your message:")
+linkedin_url = st.text_input("LinkedIn Profile URL")
 
 if st.button("Generate Email"):
-    profile_data = scrape_linkedin_profile(profile_url)
-
-    if profile_data:
-        email = generate_email(profile_data, message)
-        if email:
-            st.success(f"**Generated Email:**\n\n{email}")
-        else:
-            st.error("Error generating email.")
+    if linkedin_url:
+        try:
+            profile_data = scrape_linkedin_profile(linkedin_url)
+            email_text = generate_custom_email(profile_data)
+            st.subheader("Generated Email")
+            st.write(email_text)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
     else:
-        st.error("Error scraping LinkedIn profile.")
+        st.write("Please enter a valid LinkedIn profile URL.")
